@@ -51,6 +51,11 @@ public class TOadsAreaBook implements Serializable {
     @ApiModelProperty(value = "属地一直写到门牌（澜原省—江水市—区—街巷）")
     private String roadName;
 
+    /** 辖段围栏 矩形 lng1,lat1;lng2,lat2 两对角点，闭区间 */
+    @TableField("fence_text")
+    @ApiModelProperty(value = "辖段围栏 矩形 lng1,lat1;lng2,lat2")
+    private String fenceText;
+
     /** 来路（市里段册下发／本局自录） */
     @TableField("align_kind")
     @ApiModelProperty(value = "来路（市里段册下发／本局自录）")
@@ -131,6 +136,14 @@ public class TOadsAreaBook implements Serializable {
 
     public void setRoadName(String roadName) {
         this.roadName = roadName;
+    }
+
+    public String getFenceText() {
+        return fenceText;
+    }
+
+    public void setFenceText(String fenceText) {
+        this.fenceText = fenceText;
     }
 
     public String getAlignKind() {

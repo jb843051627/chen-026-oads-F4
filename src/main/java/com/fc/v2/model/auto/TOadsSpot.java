@@ -12,6 +12,7 @@ import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.Date;
 
 /**
@@ -45,6 +46,36 @@ public class TOadsSpot implements Serializable {
     @TableField("area_no")
     @ApiModelProperty(value = "段册代号（冗余自段册）")
     private String areaNo;
+
+    /** 经度（现场采集，前端不得人工改写） */
+    @TableField("longitude")
+    @ApiModelProperty(value = "经度（现场采集，前端不得人工改写）")
+    private BigDecimal longitude;
+
+    /** 纬度（现场采集，前端不得人工改写） */
+    @TableField("latitude")
+    @ApiModelProperty(value = "纬度（现场采集，前端不得人工改写）")
+    private BigDecimal latitude;
+
+    /** 辖段全称冗余（与目录有出入时以目录为准修正） */
+    @TableField("area_name")
+    @ApiModelProperty(value = "辖段全称冗余（以目录为准）")
+    private String areaName;
+
+    /** 建行当季季度码 如2026Q4 */
+    @TableField("quarter_code")
+    @ApiModelProperty(value = "建行当季季度码")
+    private String quarterCode;
+
+    /** 在走步序 1待核 2已核 3压卡；NULL=旧行一步未走（步序以留痕重数为准） */
+    @TableField("flow_step")
+    @ApiModelProperty(value = "在走步序 1待核 2已核 3压卡")
+    private Integer flowStep;
+
+    /** 建行通道 MANUAL建档岗逐条 BATCH集中更换带出 */
+    @TableField("build_kind")
+    @ApiModelProperty(value = "建行通道 MANUAL/BATCH")
+    private String buildKind;
 
     /** 设置主体代号或承办岗代号 */
     @TableField("set_no")
@@ -169,6 +200,54 @@ public class TOadsSpot implements Serializable {
 
     public void setAreaNo(String areaNo) {
         this.areaNo = areaNo;
+    }
+
+    public BigDecimal getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(BigDecimal longitude) {
+        this.longitude = longitude;
+    }
+
+    public BigDecimal getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(BigDecimal latitude) {
+        this.latitude = latitude;
+    }
+
+    public String getAreaName() {
+        return areaName;
+    }
+
+    public void setAreaName(String areaName) {
+        this.areaName = areaName;
+    }
+
+    public String getQuarterCode() {
+        return quarterCode;
+    }
+
+    public void setQuarterCode(String quarterCode) {
+        this.quarterCode = quarterCode;
+    }
+
+    public Integer getFlowStep() {
+        return flowStep;
+    }
+
+    public void setFlowStep(Integer flowStep) {
+        this.flowStep = flowStep;
+    }
+
+    public String getBuildKind() {
+        return buildKind;
+    }
+
+    public void setBuildKind(String buildKind) {
+        this.buildKind = buildKind;
     }
 
     public String getSetNo() {

@@ -92,9 +92,12 @@ public class TOadsSpotServiceImpl extends ServiceImpl<TOadsSpotMapper, TOadsSpot
                 return 0;
             }
         }
+        // 待补处数只有一套口径：核定应设-已核验（30与12得18），存量/新增不分叉。
+        // 五检查点流程的完整判定（身份/围栏/名录）在 ITOadsSpotRegisterService 那唯一裁决处；
+        // 这里的老通用建行口仍按同一减法轧数，不保留 need+got 的第二条算法。
         int remIn = record.getNeedNum() == null ? 0 : record.getNeedNum();
         int remOut = record.getGotNum() == null ? 0 : record.getGotNum();
-        record.setLackNum(remIn + remOut);
+        record.setLackNum(remIn - remOut);
 
         record.setDelFlag(0);
         return this.baseMapper.insert(record);
@@ -116,6 +119,8 @@ public class TOadsSpotServiceImpl extends ServiceImpl<TOadsSpotMapper, TOadsSpot
 
         // 挂牌情形档/挂设档位的唯一挪法是核准单封存；通用修改入口报来的这两列一律不采信，压回现值。
         // 安全分档三列同理：只许 gradeAndFix 那一个事务固化，旁入口一律不采信。
+        // 在走步序（flow_step）只由步序留痕重数落账、待补处数（lack_num）只由 need-got 轧：
+        // 通用修改口既不采信报文自报的档，也不采信手填的待补。
         TOadsSpot current = this.baseMapper.selectById(record.getId());
         if (current != null) {
             record.setSetState(current.getSetState());
@@ -123,6 +128,12 @@ public class TOadsSpotServiceImpl extends ServiceImpl<TOadsSpotMapper, TOadsSpot
             record.setSafeLevel(current.getSafeLevel());
             record.setSafeRuleCode(current.getSafeRuleCode());
             record.setSafeEffStart(current.getSafeEffStart());
+            record.setFlowStep(current.getFlowStep());
+            int need = record.getNeedNum() == null
+                    ? (current.getNeedNum() == null ? 0 : current.getNeedNum()) : record.getNeedNum();
+            int got = record.getGotNum() == null
+                    ? (current.getGotNum() == null ? 0 : current.getGotNum()) : record.getGotNum();
+            record.setLackNum(need - got);
         }
 
         record.setUpdateTime(new Date());
