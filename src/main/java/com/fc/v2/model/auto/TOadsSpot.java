@@ -12,6 +12,7 @@ import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.Date;
 
 /**
@@ -45,6 +46,47 @@ public class TOadsSpot implements Serializable {
     @TableField("area_no")
     @ApiModelProperty(value = "段册代号（冗余自段册）")
     private String areaNo;
+
+    /** 季度码 如2026Q4（本季度同码判重按它） */
+    @TableField("quarter_code")
+    @ApiModelProperty(value = "季度码 如2026Q4")
+    private String quarterCode;
+
+    /** 现场采集经度（建档落一次，旁入口不改写） */
+    @TableField("lng")
+    @ApiModelProperty(value = "现场采集经度")
+    private BigDecimal lng;
+
+    /** 现场采集纬度（建档落一次，旁入口不改写） */
+    @TableField("lat")
+    @ApiModelProperty(value = "现场采集纬度")
+    private BigDecimal lat;
+
+    /** 路段全称冗余（与目录有出入以目录为准修正） */
+    @TableField("area_name")
+    @ApiModelProperty(value = "路段全称冗余")
+    private String areaName;
+
+    /** 已完成推步步数 0待核 1已核 2压卡（服务端按留痕数，屏填不算） */
+    @TableField("walk_step")
+    @ApiModelProperty(value = "已完成推步步数 0待核 1已核 2压卡")
+    private Integer walkStep;
+
+    /** 是否就地停住 0否 1是（停住即让出同点位在走名额，行仍在册） */
+    @TableField("halted")
+    @ApiModelProperty(value = "是否就地停住 0否 1是")
+    private Integer halted;
+
+    /** 建档通道 MANUAL建档岗逐条 BATCH集中更换带出 */
+    @TableField("build_channel")
+    @ApiModelProperty(value = "建档通道 MANUAL建档岗逐条 BATCH集中更换带出")
+    private String buildChannel;
+
+    /** 压卡那一刻（到头，只许另开一行） */
+    @TableField("sealed_at")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss.SSS", timezone = "GMT+8")
+    @ApiModelProperty(value = "压卡那一刻")
+    private Date sealedAt;
 
     /** 设置主体代号或承办岗代号 */
     @TableField("set_no")
@@ -169,6 +211,70 @@ public class TOadsSpot implements Serializable {
 
     public void setAreaNo(String areaNo) {
         this.areaNo = areaNo;
+    }
+
+    public String getQuarterCode() {
+        return quarterCode;
+    }
+
+    public void setQuarterCode(String quarterCode) {
+        this.quarterCode = quarterCode;
+    }
+
+    public BigDecimal getLng() {
+        return lng;
+    }
+
+    public void setLng(BigDecimal lng) {
+        this.lng = lng;
+    }
+
+    public BigDecimal getLat() {
+        return lat;
+    }
+
+    public void setLat(BigDecimal lat) {
+        this.lat = lat;
+    }
+
+    public String getAreaName() {
+        return areaName;
+    }
+
+    public void setAreaName(String areaName) {
+        this.areaName = areaName;
+    }
+
+    public Integer getWalkStep() {
+        return walkStep;
+    }
+
+    public void setWalkStep(Integer walkStep) {
+        this.walkStep = walkStep;
+    }
+
+    public Integer getHalted() {
+        return halted;
+    }
+
+    public void setHalted(Integer halted) {
+        this.halted = halted;
+    }
+
+    public String getBuildChannel() {
+        return buildChannel;
+    }
+
+    public void setBuildChannel(String buildChannel) {
+        this.buildChannel = buildChannel;
+    }
+
+    public Date getSealedAt() {
+        return sealedAt;
+    }
+
+    public void setSealedAt(Date sealedAt) {
+        this.sealedAt = sealedAt;
     }
 
     public String getSetNo() {

@@ -12,6 +12,7 @@ import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.Date;
 
 /**
@@ -45,6 +46,31 @@ public class TOadsAreaBook implements Serializable {
     @TableField("area_kind")
     @ApiModelProperty(value = "辖段类别")
     private String areaKind;
+
+    /** 围栏经度起（含） */
+    @TableField("lng_min")
+    @ApiModelProperty(value = "围栏经度起（含）")
+    private BigDecimal lngMin;
+
+    /** 围栏经度止（含） */
+    @TableField("lng_max")
+    @ApiModelProperty(value = "围栏经度止（含）")
+    private BigDecimal lngMax;
+
+    /** 围栏纬度起（含） */
+    @TableField("lat_min")
+    @ApiModelProperty(value = "围栏纬度起（含）")
+    private BigDecimal latMin;
+
+    /** 围栏纬度止（含） */
+    @TableField("lat_max")
+    @ApiModelProperty(value = "围栏纬度止（含）")
+    private BigDecimal latMax;
+
+    /** 可见岗位清单（逗号分隔：本段经办岗只见本段；区局岗按划归辖段，三类路段都可见） */
+    @TableField("scope_posts")
+    @ApiModelProperty(value = "可见岗位清单（逗号分隔）")
+    private String scopePosts;
 
     /** 属地一直写到门牌（澜原省—江水市—区—街巷） */
     @TableField("road_name")
@@ -123,6 +149,46 @@ public class TOadsAreaBook implements Serializable {
 
     public void setAreaKind(String areaKind) {
         this.areaKind = areaKind;
+    }
+
+    public BigDecimal getLngMin() {
+        return lngMin;
+    }
+
+    public void setLngMin(BigDecimal lngMin) {
+        this.lngMin = lngMin;
+    }
+
+    public BigDecimal getLngMax() {
+        return lngMax;
+    }
+
+    public void setLngMax(BigDecimal lngMax) {
+        this.lngMax = lngMax;
+    }
+
+    public BigDecimal getLatMin() {
+        return latMin;
+    }
+
+    public void setLatMin(BigDecimal latMin) {
+        this.latMin = latMin;
+    }
+
+    public BigDecimal getLatMax() {
+        return latMax;
+    }
+
+    public void setLatMax(BigDecimal latMax) {
+        this.latMax = latMax;
+    }
+
+    public String getScopePosts() {
+        return scopePosts;
+    }
+
+    public void setScopePosts(String scopePosts) {
+        this.scopePosts = scopePosts;
     }
 
     public String getRoadName() {

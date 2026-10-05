@@ -21,6 +21,10 @@ fuce:
   roll-verification: false
   # 文件路径 示例（ Windows配置D:/v2/uploadPath，Linux配置 /home/v2/uploadPath）
   profile: D:/v2/uploadPath
+  # 名册建档（区局配置）：名册每页条数，页首与回执处数同源
+  oads:
+    roster:
+      page-size: 20
 #tomcat config
 server :
   port : 8080

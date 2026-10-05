@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.fc.v2.mapper.custom.TOadsRosterQueryMapper">
+
+    <!-- 名册基础数据：只呈现库中实际存在的行；当季未建行返回空，不拿邻段补齐 -->
+    <select id="queryRoster" resultType="com.fc.v2.model.auto.TOadsSpot">
+        SELECT * FROM t_oads_spot
+        WHERE del_flag = 0
+        <if test="quarterCode != null and quarterCode != ''">
+            AND quarter_code = #{quarterCode}
+        </if>
+        <choose>
+            <when test="includeUnattached">
+                AND (
+                area_no IS NULL OR area_no = ''
+                <if test="areaNos != null and areaNos.size() > 0">
+                    OR area_no IN
+                    <foreach collection="areaNos" item="no" open="(" separator="," close=")">#{no}</foreach>
+                </if>
+                )
+            </when>
+            <otherwise>
+                <!-- 本段经办岗：一个辖段都没划归时，一条都不该看得到 -->
+                AND area_no IN
+                <foreach collection="areaNos" item="no" open="(" separator="," close=")">#{no}</foreach>
+            </otherwise>
+        </choose>
+        <if test="field == 'spotNo'">
+            <choose>
+                <when test="prefix">AND spot_no LIKE CONCAT(#{value}, '%')</when>
+                <otherwise>AND spot_no = #{value}</otherwise>
+            </choose>
+        </if>
+        <if test="field == 'areaNo'">
+            <choose>
+                <when test="prefix">AND area_no LIKE CONCAT(#{value}, '%')</when>
+                <otherwise>AND area_no = #{value}</otherwise>
+            </choose>
+        </if>
+        ORDER BY create_time DESC, id DESC
+    </select>
+</mapper>

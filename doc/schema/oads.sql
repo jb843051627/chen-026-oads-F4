@@ -7,6 +7,11 @@ CREATE TABLE IF NOT EXISTS t_oads_area_book (
   area_no varchar(64) DEFAULT NULL COMMENT '属地段册代号',
   area_name varchar(128) DEFAULT NULL COMMENT '辖段全称',
   area_kind varchar(32) DEFAULT NULL COMMENT '辖段类别',
+  lng_min decimal(10,6) DEFAULT NULL COMMENT '围栏经度起（含，现场坐标落在围栏之外一律不收）',
+  lng_max decimal(10,6) DEFAULT NULL COMMENT '围栏经度止（含）',
+  lat_min decimal(10,6) DEFAULT NULL COMMENT '围栏纬度起（含）',
+  lat_max decimal(10,6) DEFAULT NULL COMMENT '围栏纬度止（含）',
+  scope_posts varchar(255) DEFAULT NULL COMMENT '可见岗位清单（逗号分隔：本段经办岗只见本段；区局岗按划归辖段）',
   road_name varchar(128) DEFAULT NULL COMMENT '属地一直写到门牌（澜原省—江水市—区—街巷）',
   align_kind varchar(32) DEFAULT NULL COMMENT '来路（市里段册下发／本局自录）',
   status int DEFAULT NULL COMMENT '段册情形 0在册 1已撤出',
@@ -201,6 +206,14 @@ CREATE TABLE IF NOT EXISTS t_oads_spot (
   spot_no varchar(64) DEFAULT NULL COMMENT '点位码',
   area_id int DEFAULT NULL COMMENT '挂在哪一段册名下',
   area_no varchar(64) DEFAULT NULL COMMENT '段册代号（冗余自段册）',
+  quarter_code varchar(8) DEFAULT NULL COMMENT '季度码 如2026Q4（本季度同码判重按它）',
+  lng decimal(10,6) DEFAULT NULL COMMENT '现场采集经度（建档落一次，旁入口不改写）',
+  lat decimal(10,6) DEFAULT NULL COMMENT '现场采集纬度（建档落一次，旁入口不改写）',
+  area_name varchar(128) DEFAULT NULL COMMENT '路段全称冗余（与目录有出入以目录为准修正）',
+  walk_step int DEFAULT NULL COMMENT '已完成推步步数 0待核 1已核 2压卡（服务端按留痕数，屏填不算）',
+  halted int DEFAULT '0' COMMENT '是否就地停住 0否 1是（停住即让出同点位在走名额，行仍在册）',
+  build_channel varchar(16) DEFAULT NULL COMMENT '建档通道 MANUAL建档岗逐条 BATCH集中更换带出',
+  sealed_at datetime(3) DEFAULT NULL COMMENT '压卡那一刻（到头，只许另开一行）',
   set_no varchar(64) DEFAULT NULL COMMENT '设置主体代号或承办岗代号',
   rule_code varchar(64) DEFAULT NULL COMMENT '点位挂着的判据线代号（区级配置；按标识取值入口照它问，空着的只走整表取优）',
   need_num int DEFAULT NULL COMMENT '核定应设处数',
@@ -248,10 +261,85 @@ CREATE TABLE IF NOT EXISTS t_oads_spot_grade_log (
 -- ALTER TABLE t_oads_spot ADD COLUMN safe_rule_code varchar(64) DEFAULT NULL COMMENT '本轮固化的判据线代号（不分档留空）' AFTER safe_level;
 -- ALTER TABLE t_oads_spot ADD COLUMN safe_eff_start datetime DEFAULT NULL COMMENT '本轮固化的起用那一一日（不分档留空）' AFTER safe_rule_code;
 
+-- ============================================================================
+-- 名册建档（chen-026 五道检查点 / 三档推步 / 辖段围栏 / 市里增量同步）
+-- 老库升级：已建过表的库手跑下列 ALTER；列名与实体契约逐列对齐，改列必须同步实体。
+-- ============================================================================
+
+-- 点位底册补列：季度码、现场坐标、路段全称冗余、三档推步步数、就地停住、建档通道、压卡时刻
+-- ALTER TABLE t_oads_spot ADD COLUMN quarter_code varchar(8) DEFAULT NULL COMMENT '季度码 如2026Q4（本季度同码判重按它）' AFTER area_no;
+-- ALTER TABLE t_oads_spot ADD COLUMN lng decimal(10,6) DEFAULT NULL COMMENT '现场采集经度（建档落一次，旁入口不改写）' AFTER quarter_code;
+-- ALTER TABLE t_oads_spot ADD COLUMN lat decimal(10,6) DEFAULT NULL COMMENT '现场采集纬度（建档落一次，旁入口不改写）' AFTER lng;
+-- ALTER TABLE t_oads_spot ADD COLUMN area_name varchar(128) DEFAULT NULL COMMENT '路段全称冗余（与目录有出入以目录为准修正）' AFTER lat;
+-- ALTER TABLE t_oads_spot ADD COLUMN walk_step int DEFAULT NULL COMMENT '已完成推步步数 0待核 1已核 2压卡（服务端按留痕数，屏填不算）' AFTER area_name;
+-- ALTER TABLE t_oads_spot ADD COLUMN halted int DEFAULT '0' COMMENT '是否就地停住 0否 1是（停住即让出同点位在走名额，行仍在册）' AFTER walk_step;
+-- ALTER TABLE t_oads_spot ADD COLUMN build_channel varchar(16) DEFAULT NULL COMMENT '建档通道 MANUAL建档岗逐条 BATCH集中更换带出（两条通道同一套样式）' AFTER halted;
+-- ALTER TABLE t_oads_spot ADD COLUMN sealed_at datetime(3) DEFAULT NULL COMMENT '压卡那一刻（到头，只许另开一行）' AFTER build_channel;
+
+-- 属地段册补列：矩形围栏四至（现场坐标落在四至之外一律不收）
+-- ALTER TABLE t_oads_area_book ADD COLUMN lng_min decimal(10,6) DEFAULT NULL COMMENT '围栏经度起（含）' AFTER area_kind;
+-- ALTER TABLE t_oads_area_book ADD COLUMN lng_max decimal(10,6) DEFAULT NULL COMMENT '围栏经度止（含）' AFTER lng_min;
+-- ALTER TABLE t_oads_area_book ADD COLUMN lat_min decimal(10,6) DEFAULT NULL COMMENT '围栏纬度起（含）' AFTER lng_max;
+-- ALTER TABLE t_oads_area_book ADD COLUMN lat_max decimal(10,6) DEFAULT NULL COMMENT '围栏纬度止（含）' AFTER lat_min;
+-- ALTER TABLE t_oads_area_book ADD COLUMN scope_posts varchar(255) DEFAULT NULL COMMENT '可见岗位清单（逗号分隔：本段经办岗只见本段；区局岗按划归辖段，三类路段都可见）' AFTER lat_max;
+-- 旧种子补围栏（手跑）：
+-- UPDATE t_oads_area_book SET lng_min=114.000000,lng_max=114.200000,lat_min=30.000000,lat_max=30.200000 WHERE id=0;
+-- UPDATE t_oads_area_book SET lng_min=113.500000,lng_max=113.700000,lat_min=30.300000,lat_max=30.500000 WHERE id=1;
+
+-- 推步留痕：三档逐级，一次推进/退回一行，只许追加。当前停在哪一步只按本表逐笔重数，
+-- 屏上填的档、经办人记的档都不作数。退回（已核→待核）把上一回留痕原样保留，另起一行记退回。
+CREATE TABLE IF NOT EXISTS t_oads_spot_walk_log (
+  id bigint NOT NULL COMMENT '主键',
+  spot_id bigint NOT NULL COMMENT '点位底册行',
+  spot_no varchar(64) DEFAULT NULL COMMENT '点位码（当时冗余）',
+  action varchar(16) NOT NULL COMMENT '动作 ADVANCE推进一步 RETURN已核退回待核（重走保留旧痕）',
+  from_step int DEFAULT NULL COMMENT '动前步数 0待核 1已核 2压卡',
+  to_step int DEFAULT NULL COMMENT '动后步数',
+  operate_by varchar(64) DEFAULT NULL COMMENT '经办人（记账用，档不由他点）',
+  act_time datetime(3) NOT NULL COMMENT '动作时刻',
+  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_time datetime DEFAULT NULL COMMENT '创建时间',
+  PRIMARY KEY (id),
+  KEY idx_walk_spot_time (spot_id, act_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='点位三档推步留痕（append-only）';
+
+-- 市里侧名册行（每日增量比对的对侧底影）。本局只读本侧，不回写市里数据。
+CREATE TABLE IF NOT EXISTS t_oads_city_spot (
+  id bigint NOT NULL COMMENT '主键',
+  spot_no varchar(64) NOT NULL COMMENT '点位码',
+  quarter_code varchar(8) NOT NULL COMMENT '季度码',
+  city_area_name varchar(128) DEFAULT NULL COMMENT '市里记的路段全称（与本局冲突逐条出清单，不静默覆盖）',
+  city_status int DEFAULT '0' COMMENT '市里情形 0在册 1已注销（市里注销而本局仍挂载，逐条列出）',
+  row_version bigint NOT NULL COMMENT '市里侧行版本号（单调递增，供游标比较）',
+  update_time datetime(3) NOT NULL COMMENT '市里侧该行最近变更时刻',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_city_spot_quarter (spot_no, quarter_code),
+  KEY idx_city_version (row_version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='市里侧名册行（增量比对对侧底影）';
+
+-- 增量比对游标：全库唯一一行。游标之前的行不复核，游标之后的行才参与本次比较；
+-- 游标随本次同步一并推进，且与本次冲突清单出自同一份计算、同一事务，别处不得自行调整。
+CREATE TABLE IF NOT EXISTS t_oads_sync_cursor (
+  id bigint NOT NULL COMMENT '主键（全库只容一行，固定 0）',
+  last_version bigint DEFAULT '0' COMMENT '已比对到的市里侧行版本（之前不复核）',
+  ran_at datetime(3) DEFAULT NULL COMMENT '上次同步时刻',
+  run_remark varchar(500) DEFAULT NULL COMMENT '上次同步交代（比对行数/冲突条数）',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime(3) DEFAULT NULL COMMENT '更新时间',
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='市里增量比对游标（全库唯一）';
+
+INSERT IGNORE INTO t_oads_sync_cursor (id, last_version, run_remark) VALUES (0, 0, '尚未同步：游标在起点，全量参与首次比较');
+
 -- 初始档案数据（t_oads_area_book 预置两条段册种子）
 -- area_id=0 为在册段册（主干道类），area_id=1 为已撤出的旧段册（次干道类），供挂接校验与新入册校验取用。
 -- 段册代号与类别按路段类型给值。
-INSERT IGNORE INTO t_oads_area_book (id, area_no, area_name, area_kind, road_name, status, del_flag, create_by, create_time)
-VALUES (0, 'DU00', '澜原省江水市云桥区临江路段（主干道类，在册）', '主干道', '澜原省—江水市—云桥区—临江街巷', 0, 0, 'seed', NOW()),
-       (1, 'DU01', '南津区北岸段·并走撤出的旧段册（已撤出）', '次干道', '澜原省—江水市—南津区—北岸街巷', 1, 0, 'seed', NOW());
+INSERT IGNORE INTO t_oads_area_book (id, area_no, area_name, area_kind, lng_min, lng_max, lat_min, lat_max, road_name, status, del_flag, create_by, create_time)
+VALUES (0, 'DU00', '澜原省江水市云桥区临江路段（主干道类，在册）', '主干道',
+        114.000000, 114.200000, 30.000000, 30.200000,
+        '澜原省—江水市—云桥区—临江街巷', 0, 0, 'seed', NOW()),
+       (1, 'DU01', '南津区北岸段·并走撤出的旧段册（已撤出）', '次干道',
+        113.500000, 113.700000, 30.300000, 30.500000,
+        '澜原省—江水市—南津区—北岸街巷', 1, 0, 'seed', NOW());
 

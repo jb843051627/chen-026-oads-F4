@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('点位名册建档（五道检查点）')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" id="roster-query-form" action="">
+            <div class="layui-form-item" style="margin-bottom:8px;">
+                <label class="layui-form-label">季度码</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="quarterCode" placeholder="2026Q4" class="layui-input" value="2026Q4">
+                </div>
+                <label class="layui-form-label">查询入口</label>
+                <div class="layui-input-inline" style="width:130px;">
+                    <select name="field">
+                        <option value="spotNo">点位编码</option>
+                        <option value="areaNo">路段代号</option>
+                        <option value="areaKind">路段类别</option>
+                    </select>
+                </div>
+                <div class="layui-input-inline" style="width:110px;">
+                    <select name="match">
+                        <option value="eq">全等</option>
+                        <option value="prefix">前缀匹配</option>
+                    </select>
+                </div>
+                <div class="layui-input-inline">
+                    <input type="text" name="value" placeholder="查询值" class="layui-input">
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="roster-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">重置</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <blockquote class="layui-elem-quote">
+            本季在册处数（页首与回执同一处写回）：<span id="roster-spot-num">-</span> 处。
+            三种视图处数必须一致：按辖段类别 <span id="roster-v-kind">-</span>、
+            按路段代号 <span id="roster-v-no">-</span>、按建档情形 <span id="roster-v-channel">-</span>。
+            每页条数取区局配置：<span id="roster-page-size" th:text="${pageSize}">20</span> 行/页。
+            <button class="pear-btn pear-btn-sm pear-btn-warming" id="roster-views-btn">
+                <i class="layui-icon layui-icon-template-1"></i> 刷新三视图
+            </button>
+            <button class="pear-btn pear-btn-sm pear-btn-normal" id="roster-sync-btn"
+                    shiro:hasPermission="oads:oadsRoster:sync">
+                <i class="layui-icon layui-icon-refresh-3"></i> 市里增量比对
+            </button>
+        </blockquote>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="roster-table" lay-filter="roster-table"></table>
+    </div>
+</div>
+
+<script type="text/html" id="roster-toolbar">
+    <button shiro:hasPermission="oads:oadsRoster:build"
+            class="pear-btn pear-btn-primary pear-btn-md" lay-event="build">
+        <i class="layui-icon layui-icon-add-1"></i> 建档（建档岗逐条 / 集中更换带出，同一张单）
+    </button>
+</script>
+
+<script type="text/html" id="roster-bar">
+    <button shiro:hasPermission="oads:oadsRoster:walk"
+            class="pear-btn pear-btn-primary pear-btn-sm" lay-event="advance" title="往上推一步">推</button>
+    <button shiro:hasPermission="oads:oadsRoster:walk"
+            class="pear-btn pear-btn-warming pear-btn-sm" lay-event="return" title="已核退回待核">退</button>
+    <button shiro:hasPermission="oads:oadsRoster:walk"
+            class="pear-btn pear-btn-normal pear-btn-sm" lay-event="halt" title="就地停住">停</button>
+    <button shiro:hasPermission="oads:oadsRoster:edit"
+            class="pear-btn pear-btn-sm" lay-event="correct" title="更正已核验落地处数">数</button>
+    <button shiro:hasPermission="oads:oadsRoster:edit"
+            class="pear-btn pear-btn-sm" lay-event="rehang" title="改挂别的路段目录">挂</button>
+    <button shiro:hasPermission="oads:oadsRoster:view"
+            class="pear-btn pear-btn-sm" lay-event="history" title="推步留痕">痕</button>
+</script>
+
+<script type="text/html" id="roster-step">
+    {{#if (d.stepLabel == '压卡') { }}
+    <span class="layui-badge layui-bg-gray">压卡（到头）</span>
+    {{# }else if(d.stepLabel == '已核'){ }}
+    <span class="layui-badge layui-bg-green">已核</span>
+    {{# }else{ }}
+    <span class="layui-badge layui-bg-blue">待核</span>
+    {{# } }}
+    {{#if (!d.walking && d.stepLabel != '压卡') { }}<span class="layui-badge">已停住</span>{{# } }}
+</script>
+
+<script type="text/html" id="roster-channel">
+    {{#if (d.spot.buildChannel == 'MANUAL') { }}建档岗逐条
+    {{# }else if(d.spot.buildChannel == 'BATCH'){ }}集中更换带出
+    {{# }else{ }}纸簿迁入
+    {{# } }}
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery', 'layer'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let $ = layui.jquery;
+        let layer = layui.layer;
+
+        let MODULE_PATH = rootPath + "/oadsRoster/";
+        let CONFIGURED_PAGE_SIZE = parseInt($('#roster-page-size').text(), 10) || 20;
+
+        let cols = [[
+            {title: 'ID', field: 'id', align: 'center', width: 170, templet: d => d.spot.id},
+            {title: '点位编码', align: 'center', templet: d => d.spot.spotNo},
+            {title: '季度', align: 'center', width: 90, templet: d => d.spot.quarterCode},
+            {title: '路段代号', align: 'center', width: 100, templet: d => d.spot.areaNo},
+            {title: '目录全称（以此为准）', align: 'left', templet: d => d.areaNameCanonical},
+            {title: '类别', align: 'center', width: 90, field: 'areaKind'},
+            {title: '核定应设', align: 'center', width: 90, templet: d => d.spot.needNum},
+            {title: '已核验落地', align: 'center', width: 100, templet: d => d.spot.gotNum},
+            {title: '待补（轧出）', align: 'center', width: 100, templet: d => d.spot.lackNum},
+            {title: '当前档', align: 'center', width: 120, toolbar: '#roster-step'},
+            {title: '建档情形', align: 'center', width: 120, toolbar: '#roster-channel'},
+            {title: '建档时间', align: 'center', width: 165, templet: d => d.spot.createTime},
+            {title: '操作', toolbar: '#roster-bar', align: 'center', width: 250, fixed: 'right'}
+        ]];
+
+        function reload() {
+            let f = {};
+            $.each($('#roster-query-form').serializeArray(), function (_, kv) { f[kv.name] = kv.value; });
+            table.reload('roster-table', {
+                where: {quarterCode: f.quarterCode, field: f.field, match: f.match, value: f.value},
+                page: {curr: 1}
+            });
+            loadViews(f.quarterCode);
+        }
+
+        table.render({
+            elem: '#roster-table',
+            url: MODULE_PATH + 'page',
+            where: {quarterCode: '2026Q4'},
+            page: true,
+            limit: CONFIGURED_PAGE_SIZE,
+            limits: [CONFIGURED_PAGE_SIZE],
+            method: 'get',
+            cols: cols,
+            skin: 'line',
+            toolbar: '#roster-toolbar',
+            defaultToolbar: ['refresh', 'filter', 'print', 'exports'],
+            request: {pageName: 'pageNum', limitName: 'limit'},
+            done: function (res) {
+                $('#roster-spot-num').text((res.msg.match(/\d+/) || ['-'])[0]);
+            }
+        });
+
+        function sumGroups(groups) {
+            let n = 0;
+            (groups || []).forEach(g => n += g.spotNum);
+            return n;
+        }
+
+        function loadViews(quarter) {
+            if (!quarter) return;
+            $.get(MODULE_PATH + 'views', {quarterCode: quarter}, function (r) {
+                if (r.code !== 200) { layer.msg(r.msg, {icon: 2}); return; }
+                $('#roster-spot-num').text(r.spotNum);
+                $('#roster-v-kind').text(sumGroups(r.data.byAreaKind) + ' 处');
+                $('#roster-v-no').text(sumGroups(r.data.byAreaNo) + ' 处');
+                $('#roster-v-channel').text(sumGroups(r.data.byBuildChannel) + ' 处');
+                let a = sumGroups(r.data.byAreaKind), b = sumGroups(r.data.byAreaNo), c = sumGroups(r.data.byBuildChannel);
+                if (a !== b || b !== c || a !== r.spotNum) {
+                    layer.msg('三种视图处数对不平：' + a + '/' + b + '/' + c + ' vs ' + r.spotNum, {icon: 2});
+                }
+            });
+        }
+
+        loadViews('2026Q4');
+
+        form.on('submit(roster-query)', function () { reload(); return false; });
+
+        function postAction(url, data, ok) {
+            $.post(MODULE_PATH + url, data, function (r) {
+                if (r.code === 200) {
+                    layer.msg(r.msg, {icon: 1, time: 1000}, function () { table.reload('roster-table'); });
+                    if (ok) ok(r);
+                } else {
+                    layer.alert(r.msg, {title: '没让办的交代', icon: 2});
+                }
+            });
+        }
+
+        table.on('tool(roster-table)', function (obj) {
+            let d = obj.data.spot;
+            if (obj.event === 'advance') {
+                postAction('advance', {id: d.id});
+            } else if (obj.event === 'return') {
+                postAction('returnToWait', {id: d.id});
+            } else if (obj.event === 'halt') {
+                layer.confirm('就地停住后行仍在册可列可计，但同点位名额腾出、行不再改字。确认？',
+                    {icon: 3}, function (i) { layer.close(i); postAction('halt', {id: d.id}); });
+            } else if (obj.event === 'correct') {
+                layer.prompt({title: '更正「已核验落地处数」（待补处数系统重轧，无录入口）', value: d.gotNum},
+                    function (v, i) { layer.close(i); postAction('correctGotNum', {id: d.id, gotNum: v}); });
+            } else if (obj.event === 'rehang') {
+                layer.prompt({title: '改挂到哪个路段代号（重过围栏，坐标不可改）'},
+                    function (v, i) { layer.close(i); postAction('rehang', {id: d.id, newAreaNo: v}); });
+            } else if (obj.event === 'history') {
+                $.get(MODULE_PATH + 'walkHistory/' + d.id, function (r) {
+                    if (r.code !== 200) { layer.msg(r.msg, {icon: 2}); return; }
+                    let html = (r.data.length === 0) ? '（无推步留痕——纸簿旧行按待核容下，不当成已压行）'
+                        : r.data.map(g => g.actTime + '　' +
+                            (['待核', '已核', '压卡'][g.fromStep]) + ' → ' + (['待核', '已核', '压卡'][g.toStep]) +
+                            '　[' + (g.action === 'RETURN' ? '退回' : '推进') + ']　' + g.operateBy).join('<br>');
+                    layer.open({type: 1, title: '推步留痕（退回旧痕原样保留）', area: ['560px', '360px'],
+                        content: '<div style="padding:18px;line-height:1.9;">' + html + '</div>'});
+                });
+            }
+        });
+
+        table.on('toolbar(roster-table)', function (obj) {
+            if (obj.event === 'build') {
+                layer.open({type: 1, title: '名册建档（两条通道同一张单，五道检查点按序）', shade: 0.1,
+                    area: ['620px', '560px'], content: $('#roster-build-panel')});
+            }
+        });
+
+        form.on('submit(roster-build-submit)', function (data) {
+            let channel = data.field.buildChannel;
+            let url = channel === 'BATCH' ? 'buildFromBatch' : 'buildManual';
+            $.ajax({url: MODULE_PATH + url, type: 'post', data: data.field,
+                success: function (r) {
+                    if (r.code === 200) {
+                        layer.msg(r.msg, {icon: 1, time: 1200}, function () {
+                            layer.closeAll(); table.reload('roster-table');
+                            loadViews(data.field.quarterCode);
+                        });
+                    } else {
+                        layer.alert(r.msg, {title: '检查点没让过', icon: 2});
+                    }
+                }});
+            return false;
+        });
+
+        $('#roster-views-btn').on('click', function () {
+            let q = $('input[name=quarterCode]').last().val();
+            loadViews(q);
+        });
+
+        $('#roster-sync-btn').on('click', function () {
+            $.post(MODULE_PATH + 'sync', function (r) {
+                if (r.code !== 200) { layer.alert(r.msg, {icon: 2}); return; }
+                let d = r.data;
+                let html = '游标 ' + d.fromVersion + ' → ' + d.toVersion + '；本次比较 '
+                    + d.comparedRows + ' 行；冲突 ' + d.conflicts.length + ' 条（以本局为准，不静默覆盖）：';
+                if (d.conflicts.length) {
+                    html += '<br><br>' + d.conflicts.map(c =>
+                        '· [' + c.type + '] ' + c.spotNo + '（' + c.quarterCode + '）：' + c.message).join('<br>');
+                }
+                layer.open({type: 1, title: '市里增量比对冲突清单', area: ['680px', '420px'],
+                    content: '<div style="padding:18px;line-height:1.8;">' + html + '</div>'});
+                table.reload('roster-table');
+            });
+        });
+    });
+</script>
+
+<!-- 唯一一张建档单：建档岗逐条 / 集中更换带出共用，没有第二种样式。待补处数无录入口。 -->
+<form class="layui-form" id="roster-build-panel" style="display:none;padding:20px;">
+    <div class="layui-form-item">
+        <label class="layui-form-label">建档通道</label>
+        <div class="layui-input-block">
+            <input type="radio" name="buildChannel" value="MANUAL" title="建档岗逐条建立" checked>
+            <input type="radio" name="buildChannel" value="BATCH" title="集中更换核验完成带出">
+        </div>
+    </div>
+    <div class="layui-form-item">
+        <label class="layui-form-label">更新行ID</label>
+        <div class="layui-input-block">
+            <input type="text" name="id" placeholder="不填=新建；改本季度同码那一行时填它的主键，按更新不挡回" class="layui-input">
+        </div>
+    </div>
+    <div class="layui-form-item">
+        <label class="layui-form-label">点位编码</label>
+        <div class="layui-input-inline" style="width:200px;">
+            <input type="text" name="spotNo" required lay-verify="required" placeholder="报送材料自带，系统不另发" class="layui-input">
+        </div>
+        <label class="layui-form-label" style="width:80px;">季度码</label>
+        <div class="layui-input-inline" style="width:120px;">
+            <input type="text" name="quarterCode" required lay-verify="required" placeholder="2026Q4" class="layui-input">
+        </div>
+    </div>
+    <div class="layui-form-item">
+        <label class="layui-form-label">路段代号</label>
+        <div class="layui-input-inline" style="width:150px;">
+            <input type="text" name="areaNo" required lay-verify="required" placeholder="挂路段目录" class="layui-input">
+        </div>
+        <label class="layui-form-label" style="width:80px;">批次码</label>
+        <div class="layui-input-inline" style="width:150px;">
+            <input type="text" name="batchNo" placeholder="仅集中更换通道必填" class="layui-input">
+        </div>
+    </div>
+    <div class="layui-form-item">
+        <label class="layui-form-label">现场经度</label>
+        <div class="layui-input-inline" style="width:170px;">
+            <input type="number" step="0.000001" name="lng" required lay-verify="required" placeholder="现场采集，不得人工改写" class="layui-input">
+        </div>
+        <label class="layui-form-label" style="width:80px;">现场纬度</label>
+        <div class="layui-input-inline" style="width:170px;">
+            <input type="number" step="0.000001" name="lat" required lay-verify="required" placeholder="现场采集，不得人工改写" class="layui-input">
+        </div>
+    </div>
+    <div class="layui-form-item">
+        <label class="layui-form-label">报送主体</label>
+        <div class="layui-input-inline" style="width:170px;">
+            <input type="text" name="setNo" placeholder="各路段经营主体代号" class="layui-input">
+        </div>
+        <label class="layui-form-label" style="width:100px;">核定应设处数</label>
+        <div class="layui-input-inline" style="width:110px;">
+            <input type="number" step="1" name="needNum" required lay-verify="required" placeholder="整数，非负" class="layui-input">
+        </div>
+    </div>
+    <div class="layui-form-item">
+        <label class="layui-form-label">已核验落地</label>
+        <div class="layui-input-inline" style="width:170px;">
+            <input type="number" step="1" name="gotNum" placeholder="缺填按0；不得高于核定应设" class="layui-input">
+        </div>
+        <div class="layui-form-mid layui-word-aux">待补处数无录入口，由系统按 核定应设−已核验 重轧</div>
+    </div>
+    <div class="layui-form-item">
+        <label class="layui-form-label">牌面题名</label>
+        <div class="layui-input-block">
+            <textarea name="content" placeholder="随件交来的牌面题名与要件" class="layui-textarea"></textarea>
+        </div>
+    </div>
+    <div class="layui-form-item">
+        <div class="layui-input-block">
+            <button class="pear-btn pear-btn-primary" lay-submit lay-filter="roster-build-submit">提交五道检查点</button>
+        </div>
+    </div>
+</form>
+</body>
+</html>
